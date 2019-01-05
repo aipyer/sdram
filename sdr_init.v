@@ -9,24 +9,33 @@
 //
 //============================================================
 
-module sdr_init(/*autoarg*/);
+module sdr_init(/*autoarg*/
+    //Outputs
+    sdr_CKE, sdr_nCS, sdr_BA, sdr_A, sdr_nRAS, sdr_nCAS, sdr_nWE,
+    sdr_DQM, init_done,
+
+    //Inputs
+    clk, rst_n
+);
+
+`include "sdr_parameters.vh"
 
 //port decleration
-input                 clk         ;  //clock, 167MHz
-input                 rst_n       ;  //reset
+input                 clk          ;  //clock, 167MHz
+input                 rst_n        ;  //reset
 
 //sdr 
-output                sdr_CKE     ;
+output                sdr_CKE      ;
 output                sdr_nCS      ;
-output      [1:0]     sdr_BA      ;
-output      [12:0]    sdr_A       ;
-output                sdr_nRAS    ;
-output                sdr_nCAS    ;
-output                sdr_nWE     ;
-output      [1:0]   sdr_DQM;
+output      [1:0]     sdr_BA       ;
+output      [12:0]    sdr_A        ;
+output                sdr_nRAS     ;
+output                sdr_nCAS     ;
+output                sdr_nWE      ;
+output      [1:0]     sdr_DQM      ;
 
 //
-output  init_done;
+output                init_done    ;
 
     //parameter decleration
 localparam S_IDLE = 4'h0;
@@ -45,26 +54,47 @@ localparam CMD_PRECHARGE = 3'b010;
 localparam CMD_AUTO_REFRESH = 3'b001;
 localparam CMD_LMR = 3'b000;
 
-localparam tCK = 1;
-localparam tRAS = 7;
-localparam tRC = 10;
-localparam tRFC = 10;
-localparam tRP = 18;
-localparam tRRD = 2;
-localparam tWR = 2;
-localparam tMRD = 2;
-//localparam tREF = 
+localparam N_CK = tCK/tCK;
+localparam N_RAS = tRAS/tCK;
+localparam N_RC = tRC/tCK;
+localparam N_RFC = tRFC/tCK;
+localparam N_RP = tRP/tCK;
+localparam N_MRD = tMRD/tCK;
+localparam N_100US = (17'd100_000/tCK + 1);
 //
 
 /*autodefine*/
+//auto wires{{{
+wire        auto_refresh_done ;
+wire        init_done ;
+wire        load_mode_reg_done ;
+wire        power_on_done ;
+wire        precharge_done ;
+wire [1:0]  sdr_BA ;
+wire        sdr_CKE ;
+wire [1:0]  sdr_DQM ;
+wire        sdr_nCS ;
+//}}}
+//auto regs{{{
+reg        sdr_nCAS ;
+reg        sdr_nRAS ;
+reg        sdr_nWE ;
+reg [16:0] base_cnt ;
+reg        base_cnt_en ;
+reg        init_req ;
+reg [12:0] sdr_A ;
+reg [3:0]  sdr_init_state ;
+reg [3:0]  sdr_init_state_nxt ;
+//}}}
+// End of automatic define
 
 always @(posedge clk or negedge rst_n)
     if(!rst_n)
-        base_cnt[15:0] <= #`RD 16'h0;
+        base_cnt[16:0] <= #`RD 17'h0;
     else if(power_on_done | precharge_done | auto_refresh_done | load_mode_reg_done)
-        base_cnt <= #`RD 16'h0;
+        base_cnt <= #`RD 17'h0;
     else if(base_cnt_en)
-        base_cnt <= #`RD base_cnt + 16'h1;
+        base_cnt <= #`RD base_cnt + 17'h1;
 
 always @(posedge clk or negedge rst_n)
     if(!rst_n)
@@ -74,11 +104,11 @@ always @(posedge clk or negedge rst_n)
     else if(init_done)
         base_cnt_en <= #`RD 1'h0;
 
-assign power_on_done = (base_cnt == 16'd166_67) & (sdr_init_state == S_POWER_ON);
-assign precharge_done = (base_cnt == tRP) & (sdr_init_state == S_PRECHARGE);
-assign auto_refresh_done = (base_cnt == tRFC) & ((sdr_init_state == S_AUTO_REFRESH) | (sdr_init_state == S_AUTO_REFRESH_2));
-assign load_mode_reg_done = (base_cnt == tMRD) & (sdr_init_state == S_LMR);
-assign sdr_init_done = (sdr_init_state == S_LMR) & (sdr_init_state_nxt == S_IDLE);
+assign power_on_done = (base_cnt >= N_100US) & (sdr_init_state == S_POWER_ON);
+assign precharge_done = (base_cnt >= N_RP) & (sdr_init_state == S_PRECHARGE);
+assign auto_refresh_done = (base_cnt >= N_RFC) & ((sdr_init_state == S_AUTO_REFRESH) | (sdr_init_state == S_AUTO_REFRESH_2));
+assign load_mode_reg_done = (base_cnt >= N_MRD) & (sdr_init_state == S_LMR);
+assign init_done = (sdr_init_state == S_LMR) & (sdr_init_state_nxt == S_IDLE);
 
 always @(posedge clk or negedge rst_n)
     if(!rst_n)

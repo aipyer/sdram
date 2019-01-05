@@ -1,42 +1,112 @@
 
-module sdr_top(/*autoarg*/);
+module sdr_top(/*autoarg*/
+    //Inouts
+    sdr_DQ,
+
+    //Outputs
+    sdr_wr_ready, sdr_rdata_out, sdr_rd_vld, sdr_CKE, sdr_nCS, sdr_BA,
+    sdr_A, sdr_nRAS, sdr_nCAS, sdr_nWE, sdr_DQM,
+
+    //Inputs
+    clk, rst_n, sdr_wr_req, sdr_wdata_in, sdr_wr_vld, sdr_waddr,
+    sdr_rd_req, sdr_raddr
+);
 
 //port decleration
-input clk;//clock, 167MHz
-input rst_n;//reset
+input                 clk              ;  //clock, 167MHz
+input                 rst_n            ;  //reset
 
-input   sdr_wr_req;
-input [15:0]  sdr_wdata_in;
-input   sdr_wr_vld;
-output  sdr_wr_ready;
-input [31:0] sdr_waddr;
+input                 sdr_wr_req       ;
+input       [15:0]    sdr_wdata_in     ;
+input                 sdr_wr_vld       ;
+output                sdr_wr_ready     ;
+input       [31:0]    sdr_waddr        ;
 
-input   sdr_rd_req;
-output  [15:0] sdr_rdata_out;
-output  sdr_rd_vld;
-input [31:0] sdr_raddr;
+input                 sdr_rd_req       ;
+output      [15:0]    sdr_rdata_out    ;
+output                sdr_rd_vld       ;
+input       [31:0]    sdr_raddr        ;
 
 
 //sdr
-output sdr_CKE;
-output sdr_nCS;
-output [1:0] sdr_BA;
-output [12:0] sdr_A;
-output sdr_nRAS;
-output sdr_nCAS;
-output sdr_nWE;
-inout [15:0] sdr_DQ;
-output [1:0] sdr_DQM;
+output                sdr_CKE          ;
+output                sdr_nCS          ;
+output      [1:0]     sdr_BA           ;
+output      [12:0]    sdr_A            ;
+output                sdr_nRAS         ;
+output                sdr_nCAS         ;
+output                sdr_nWE          ;
+inout       [15:0]    sdr_DQ           ;
+output      [1:0]     sdr_DQM          ;
 
 localparam S_INIT = 4'h0;
 localparam S_IDLE = 4'h1;
 localparam S_WRITE = 4'h2;
 localparam S_READ = 4'h3;
 
+/*autodefine*/
+//auto wires{{{
+wire        init_done ;
+wire        rd_done ;
+wire [15:0] sdr_DQ ;
+wire [12:0] sdr_init_A ;
+wire [1:0]  sdr_init_BA ;
+wire        sdr_init_CKE ;
+wire [1:0]  sdr_init_DQM ;
+wire        sdr_init_nCAS ;
+wire        sdr_init_nCS ;
+wire        sdr_init_nRAS ;
+wire        sdr_init_nWE ;
+wire [12:0] sdr_rd_A ;
+wire [1:0]  sdr_rd_BA ;
+wire        sdr_rd_CKE ;
+wire [15:0] sdr_rd_DQ ;
+wire [1:0]  sdr_rd_DQM ;
+wire [1:0]  sdr_rd_bank_addr ;
+wire [8:0]  sdr_rd_col_addr ;
+wire        sdr_rd_nCAS ;
+wire        sdr_rd_nCS ;
+wire        sdr_rd_nRAS ;
+wire        sdr_rd_nWE ;
+wire [12:0] sdr_rd_row_addr ;
+wire        sdr_rd_vld ;
+wire [15:0] sdr_rdata_out ;
+wire [12:0] sdr_wr_A ;
+wire [1:0]  sdr_wr_BA ;
+wire        sdr_wr_CKE ;
+wire [15:0] sdr_wr_DQ ;
+wire [1:0]  sdr_wr_DQM ;
+wire [1:0]  sdr_wr_bank_addr ;
+wire [8:0]  sdr_wr_col_addr ;
+wire        sdr_wr_nCAS ;
+wire        sdr_wr_nCS ;
+wire        sdr_wr_nRAS ;
+wire        sdr_wr_nWE ;
+wire        sdr_wr_ready ;
+wire [12:0] sdr_wr_row_addr ;
+wire        wr_done ;
+//}}}
+//auto regs{{{
+reg [12:0] sdr_A ;
+reg [1:0]  sdr_BA ;
+reg        sdr_CKE ;
+reg [1:0]  sdr_DQM ;
+reg        sdr_nCAS ;
+reg        sdr_nCS ;
+reg        sdr_nRAS ;
+reg        sdr_nWE ;
+reg [3:0]  sdr_state ;
+reg [3:0]  sdr_state_nxt ;
+//}}}
+// End of automatic define
+
 assign sdr_wr_bank_addr[1:0] = sdr_waddr[24:23];
 assign sdr_wr_row_addr[12:0] = sdr_waddr[22:10];
 assign sdr_wr_col_addr[8:0] = sdr_waddr[9:0];
 
+assign sdr_rd_bank_addr[1:0] = sdr_raddr[24:23];
+assign sdr_rd_row_addr[12:0] = sdr_raddr[22:10];
+assign sdr_rd_col_addr[8:0] = sdr_raddr[9:0];
 
 always @(posedge clk or negedge rst_n)
     if(!rst_n)
@@ -50,8 +120,8 @@ always @(*) begin
         S_INIT: if(init_done) sdr_state_nxt = S_IDLE;
         S_IDLE: if(sdr_wr_req) sdr_state_nxt = S_WRITE;
                 else if(sdr_rd_req) sdr_state_nxt = S_READ;
-        S_WRITE: if(sdr_wr_done) sdr_state_nxt = S_IDLE;
-        S_READ: if(sdr_rd_done) sdr_state_nxt = S_IDLE;
+        S_WRITE: if(wr_done) sdr_state_nxt = S_IDLE;
+        S_READ: if(rd_done) sdr_state_nxt = S_IDLE;
         default: sdr_state_nxt = S_INIT;
     endcase
 end
@@ -82,7 +152,14 @@ always @(*) begin
             sdr_DQM[1:0] = sdr_wr_DQM;
         end
         S_READ: begin
-
+            sdr_CKE = sdr_rd_CKE;
+            sdr_nCS = sdr_rd_nCS;
+            sdr_BA[1:0] = sdr_rd_BA;
+            sdr_A[12:0] = sdr_rd_A;
+            sdr_nRAS = sdr_rd_nRAS;
+            sdr_nCAS = sdr_rd_nCAS;
+            sdr_nWE = sdr_rd_nWE;
+            sdr_DQM[1:0] = sdr_rd_DQM;
         end
         default: begin
             sdr_CKE = 1'b0;
@@ -97,9 +174,57 @@ always @(*) begin
     endcase
 end
 
-sdr_init u_sdr_init(/*autoinst*/);
+sdr_init u_sdr_init(/*autoinst*/
+        .clk       ( clk               ),    //I         u_sdr_init    
+        .rst_n     ( rst_n             ),    //I         u_sdr_init    
+        .sdr_CKE   ( sdr_init_CKE      ),    //O         u_sdr_init    
+        .sdr_nCS   ( sdr_init_nCS      ),    //O         u_sdr_init    
+        .sdr_BA    ( sdr_init_BA[1:0]  ),    //O  [1:0]  u_sdr_init    
+        .sdr_A     ( sdr_init_A[12:0]  ),    //O  [12:0] u_sdr_init    
+        .sdr_nRAS  ( sdr_init_nRAS     ),    //O         u_sdr_init    
+        .sdr_nCAS  ( sdr_init_nCAS     ),    //O         u_sdr_init    
+        .sdr_nWE   ( sdr_init_nWE      ),    //O         u_sdr_init    
+        .sdr_DQM   ( sdr_init_DQM[1:0] ),    //O  [1:0]  u_sdr_init    
+        .init_done ( init_done         )     //O         u_sdr_init    
+);
 
-sdr_wr u_sdr_wr(/*autoinst*/);
+sdr_wr u_sdr_wr(/*autoinst*/
+        .clk           ( clk                   ),    //I         u_sdr_wr    
+        .rst_n         ( rst_n                 ),    //I         u_sdr_wr    
+        .sdr_CKE       ( sdr_wr_CKE            ),    //O         u_sdr_wr    
+        .sdr_nCS       ( sdr_wr_nCS            ),    //O         u_sdr_wr    
+        .sdr_BA        ( sdr_wr_BA[1:0]        ),    //O  [1:0]  u_sdr_wr    
+        .sdr_A         ( sdr_wr_A[12:0]        ),    //O  [12:0] u_sdr_wr    
+        .sdr_nRAS      ( sdr_wr_nRAS           ),    //O         u_sdr_wr    
+        .sdr_nCAS      ( sdr_wr_nCAS           ),    //O         u_sdr_wr    
+        .sdr_nWE       ( sdr_wr_nWE            ),    //O         u_sdr_wr    
+        .sdr_DQ        ( sdr_wr_DQ[15:0]       ),    //IO [15:0] u_sdr_wr    
+        .sdr_DQM       ( sdr_wr_DQM[1:0]       ),    //O  [1:0]  u_sdr_wr    
+        .sdr_wr_req    ( sdr_wr_req            ),    //I         u_sdr_wr    
+        .sdr_bank_addr ( sdr_wr_bank_addr[1:0] ),    //I  [1:0]  u_sdr_wr    
+        .sdr_row_addr  ( sdr_wr_row_addr[12:0] ),    //I  [12:0] u_sdr_wr    
+        .sdr_col_addr  ( sdr_wr_col_addr[8:0]  ),    //I  [8:0]  u_sdr_wr    
+        .wr_done       ( wr_done               )     //O         u_sdr_wr    
+);
+
+sdr_rd u_sdr_rd(/*autoinst*/
+        .clk           ( clk                   ),    //I         u_sdr_rd    
+        .rst_n         ( rst_n                 ),    //I         u_sdr_rd    
+        .sdr_CKE       ( sdr_rd_CKE            ),    //O         u_sdr_rd    
+        .sdr_nCS       ( sdr_rd_nCS            ),    //O         u_sdr_rd    
+        .sdr_BA        ( sdr_rd_BA[1:0]        ),    //O  [1:0]  u_sdr_rd    
+        .sdr_A         ( sdr_rd_A[12:0]        ),    //O  [12:0] u_sdr_rd    
+        .sdr_nRAS      ( sdr_rd_nRAS           ),    //O         u_sdr_rd    
+        .sdr_nCAS      ( sdr_rd_nCAS           ),    //O         u_sdr_rd    
+        .sdr_nWE       ( sdr_rd_nWE            ),    //O         u_sdr_rd    
+        .sdr_DQ        ( sdr_rd_DQ[15:0]       ),    //IO [15:0] u_sdr_rd    
+        .sdr_DQM       ( sdr_rd_DQM[1:0]       ),    //O  [1:0]  u_sdr_rd    
+        .sdr_rd_req    ( sdr_rd_req            ),    //I         u_sdr_rd    
+        .sdr_bank_addr ( sdr_rd_bank_addr[1:0] ),    //I  [1:0]  u_sdr_rd    
+        .sdr_row_addr  ( sdr_rd_row_addr[12:0] ),    //I  [12:0] u_sdr_rd    
+        .sdr_col_addr  ( sdr_rd_col_addr[8:0]  ),    //I  [8:0]  u_sdr_rd    
+        .rd_done       ( rd_done               )     //O         u_sdr_rd    
+);
 
 assign sdr_DQ[15:0] = (sdr_state == S_WRITE) ? sdr_wr_DQ : 16'hz;
 
