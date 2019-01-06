@@ -122,7 +122,7 @@ always @(posedge clk or negedge rst_n)
     else if(sdr_rd_req)
         sdr_A[12:0] <= #`RD sdr_row_addr;
     else if({sdr_rd_state, sdr_rd_state_nxt} == {S_ACTIVE, S_READ})
-        sdr_A[12:0] <= #`RD {2'h0, 1'b0, 1'b0, sdr_col_addr};
+        sdr_A[12:0] <= #`RD {2'h0, 1'b1, 1'b0, sdr_col_addr};
 
 assign sdr_DQM[1:0] = 2'h0;
 assign sdr_CKE = 1'b1;

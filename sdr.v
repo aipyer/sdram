@@ -488,6 +488,8 @@ module sdr (Dq, Addr, Ba, Clk, Cke, Cs_n, Ras_n, Cas_n, We_n, Dqm);
                 Pc_b0 = 1'b1;
                 RP_chk0 = $time;
 
+		$display ("%m : at time %t NOTE : Start Internal Auto Precharge for Bank0", $time);
+
                 // Activate to Precharge
                 if ($time - RAS_chk0 < tRAS) begin
                     $display ("%m : at time %t ERROR: tRAS violation during Precharge", $time);
@@ -504,6 +506,8 @@ module sdr (Dq, Addr, Ba, Clk, Cke, Cs_n, Ras_n, Cas_n, We_n, Dqm);
                 Act_b1 = 1'b0;
                 Pc_b1 = 1'b1;
                 RP_chk1 = $time;
+
+		$display ("%m : at time %t NOTE : Start Internal Auto Precharge for Bank1", $time);
 
                 // Activate to Precharge
                 if ($time - RAS_chk1 < tRAS) begin
@@ -522,6 +526,8 @@ module sdr (Dq, Addr, Ba, Clk, Cke, Cs_n, Ras_n, Cas_n, We_n, Dqm);
                 Pc_b2 = 1'b1;
                 RP_chk2 = $time;
 
+		$display ("%m : at time %t NOTE : Start Internal Auto Precharge for Bank2", $time);
+
                 // Activate to Precharge
                 if ($time - RAS_chk2 < tRAS) begin
                     $display ("%m : at time %t ERROR: tRAS violation during Precharge", $time);
@@ -538,6 +544,8 @@ module sdr (Dq, Addr, Ba, Clk, Cke, Cs_n, Ras_n, Cas_n, We_n, Dqm);
                 Act_b3 = 1'b0;
                 Pc_b3 = 1'b1;
                 RP_chk3 = $time;
+
+		$display ("%m : at time %t NOTE : Start Internal Auto Precharge for Bank3", $time);
 
                 // Activate to Precharge
                 if ($time - RAS_chk3 < tRAS) begin
@@ -1047,7 +1055,15 @@ module sdr (Dq, Addr, Ba, Clk, Cke, Cs_n, Ras_n, Cas_n, We_n, Dqm);
         specparam
             tAH  =  0.8,                                        // Addr, Ba Hold Time
             tAS  =  1.5,                                        // Addr, Ba Setup Time
+    `ifdef sg6a
+            tCK3 =  6.0,
+    `elsif `ifdef sg7e
+            tCK3 =  7.0,
+        `endif
+    `else `ifdef sg75
             tCK3 =  7.5,
+        `endif
+    `endif
             tCH  =  2.5,                                        // Clock High-Level Width
             tCL  =  2.5,                                        // Clock Low-Level Width
             tCKH =  0.8,                                        // CKE Hold  Time
@@ -1058,8 +1074,8 @@ module sdr (Dq, Addr, Ba, Clk, Cke, Cs_n, Ras_n, Cas_n, We_n, Dqm);
             tDS  =  1.5;                                        // Data-in Setup Time
         $width    (posedge Clk,           tCH);
         $width    (negedge Clk,           tCL);
-        $period   (negedge Clk,           tCK3_min);
-        $period   (posedge Clk,           tCK3_min);
+        $period   (negedge Clk,           tCK3);
+        $period   (posedge Clk,           tCK3);
         $setuphold(posedge Clk,    Cke,   tCKS, tCKH);
         $setuphold(posedge Clk,    Cs_n,  tCMS, tCMH);
         $setuphold(posedge Clk,    Cas_n, tCMS, tCMH);

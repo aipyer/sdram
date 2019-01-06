@@ -84,7 +84,7 @@ wire        sdr_wr_nRAS ;
 wire        sdr_wr_nWE ;
 wire        sdr_wr_ready ;
 wire [12:0] sdr_wr_row_addr ;
-wire        wr_done ;
+wire        wr_exit ;
 //}}}
 //auto regs{{{
 reg [12:0] sdr_A ;
@@ -120,7 +120,7 @@ always @(*) begin
         S_INIT: if(init_done) sdr_state_nxt = S_IDLE;
         S_IDLE: if(sdr_wr_req) sdr_state_nxt = S_WRITE;
                 else if(sdr_rd_req) sdr_state_nxt = S_READ;
-        S_WRITE: if(wr_done) sdr_state_nxt = S_IDLE;
+        S_WRITE: if(wr_exit) sdr_state_nxt = S_IDLE;
         S_READ: if(rd_done) sdr_state_nxt = S_IDLE;
         default: sdr_state_nxt = S_INIT;
     endcase
@@ -204,7 +204,7 @@ sdr_wr u_sdr_wr(/*autoinst*/
         .sdr_bank_addr ( sdr_wr_bank_addr[1:0] ),    //I  [1:0]  u_sdr_wr    
         .sdr_row_addr  ( sdr_wr_row_addr[12:0] ),    //I  [12:0] u_sdr_wr    
         .sdr_col_addr  ( sdr_wr_col_addr[8:0]  ),    //I  [8:0]  u_sdr_wr    
-        .wr_done       ( wr_done               )     //O         u_sdr_wr    
+        .wr_exit       ( wr_exit               )     //O         u_sdr_wr    
 );
 
 sdr_rd u_sdr_rd(/*autoinst*/

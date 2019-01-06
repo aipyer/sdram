@@ -68,7 +68,17 @@ initial begin
     sdr_waddr = 32'h0;
     #tCK;
     sdr_wr_req = 1'b0;
+    #100us;
+    sdr_rd_req = 1'b1;
+    sdr_raddr = 32'h0;
+    #tCK;
+    sdr_rd_req = 1'b0;
     #1us;
+    sdr_wr_req = 1'b1;
+    sdr_waddr = 32'h0;
+    #tCK;
+    sdr_wr_req = 1'b0;
+    #100us;
     sdr_rd_req = 1'b1;
     sdr_raddr = 32'h0;
     #tCK;
