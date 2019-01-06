@@ -65,10 +65,6 @@ reg[12:0]     sdr_A;
 reg[1:0]      sdr_BA;
 reg[3:0]      sdr_wr_state;
 reg[3:0]      sdr_wr_state_nxt;
-reg[12:0]   bank0_act_row;
-reg[12:0]   bank1_act_row;
-reg[12:0]   bank2_act_row;
-reg[12:0]   bank3_act_row;
 //}}}
 // End of automatic define
 
