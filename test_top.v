@@ -96,7 +96,10 @@ always @ (posedge clk) begin
 end
 */
 
-
+initial begin
+    $fsdbDumpfile("debug.fsdb");
+    $fsdbDumpvars(0);
+end
 
 endmodule
 //verilog-library-directories(".")
