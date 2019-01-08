@@ -26,7 +26,11 @@ output                sdr_nWE          ;
 inout       [15:0]    sdr_DQ           ;
 output      [1:0]     sdr_DQM          ;
 
-input                 sdr_wr_req       ;
+input                 sdr_wr_req       ;    //write operation request
+//input       [11:0]    sdr_wr_byte_cnt  ;    //write total byte cnt
+//input                 sdr_wr_term      ;    //write operation termination signal
+//input                 sdr_wdata_vld    ;
+//input       [15:0]    sdr_wdata        ;
 input       [1:0]     sdr_bank_addr    ;
 input       [12:0]    sdr_row_addr     ;
 input       [8:0]     sdr_col_addr     ;
@@ -88,6 +92,19 @@ assign active_done = (base_cnt >= NRCD) & (sdr_wr_state == S_ACTIVE);
 assign wr_done = (base_cnt == 4) & (sdr_wr_state == S_WRITE);
 assign precharge_done = (base_cnt >= NRP) & (sdr_wr_state == S_PRECHARGE);
 assign wr_exit = precharge_done;
+
+// if write over one row, need active new row before write data to new row
+// produce a active command request
+//always @(posedge clk or negedge rst_n)
+//    if(!rst_n)
+//        wr_total_cnt[11:0] <= #`RD 12'h0;
+//    else if(sdr_wr_req)
+//        wr_total_cnt <= #`RD 12'h0;
+//    else if(wr_vld)
+//        wr_total_cnt[11:0] <= #`RD wr_total_cnt + 12'h1;
+//
+//assign wr_one_row_end = (wr_total_cnt < sdr_wr_byte_cnt) ? (wr_total_cnt + sdr_col_addr) 
+
 
 always @(posedge clk or negedge rst_n)
     if(!rst_n)
