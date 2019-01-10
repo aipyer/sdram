@@ -8,36 +8,37 @@ module sdr_top(/*autoarg*/
     sdr_A, sdr_nRAS, sdr_nCAS, sdr_nWE, sdr_DQM,
 
     //Inputs
-    clk, rst_n, sdr_wr_req, sdr_wdata_in, sdr_wr_vld, sdr_waddr,
-    sdr_rd_req, sdr_raddr
+    clk, rst_n, sdr_wr_req, sdr_wdata_in, sdr_wdata_wr, sdr_waddr,
+    sdr_wr_byte_cnt, sdr_rd_req, sdr_raddr
 );
 
 //port decleration
-input                 clk              ;  //clock, 167MHz
-input                 rst_n            ;  //reset
+input                 clk                ;  //clock, 167MHz
+input                 rst_n              ;  //reset
 
-input                 sdr_wr_req       ;
-input       [15:0]    sdr_wdata_in     ;
-input                 sdr_wr_vld       ;
-output                sdr_wr_ready     ;
-input       [31:0]    sdr_waddr        ;
+input                 sdr_wr_req         ;
+input       [15:0]    sdr_wdata_in       ;
+input                 sdr_wdata_wr       ;
+output                sdr_wr_ready       ;
+input       [31:0]    sdr_waddr          ;
+input       [11:0]    sdr_wr_byte_cnt    ;
 
-input                 sdr_rd_req       ;
-output      [15:0]    sdr_rdata_out    ;
-output                sdr_rd_vld       ;
-input       [31:0]    sdr_raddr        ;
+input                 sdr_rd_req         ;
+output      [15:0]    sdr_rdata_out      ;
+output                sdr_rd_vld         ;
+input       [31:0]    sdr_raddr          ;
 
 
 //sdr
-output                sdr_CKE          ;
-output                sdr_nCS          ;
-output      [1:0]     sdr_BA           ;
-output      [12:0]    sdr_A            ;
-output                sdr_nRAS         ;
-output                sdr_nCAS         ;
-output                sdr_nWE          ;
-inout       [15:0]    sdr_DQ           ;
-output      [1:0]     sdr_DQM          ;
+output                sdr_CKE            ;
+output                sdr_nCS            ;
+output      [1:0]     sdr_BA             ;
+output      [12:0]    sdr_A              ;
+output                sdr_nRAS           ;
+output                sdr_nCAS           ;
+output                sdr_nWE            ;
+inout       [15:0]    sdr_DQ             ;
+output      [1:0]     sdr_DQM            ;
 
 localparam S_INIT = 4'h0;
 localparam S_IDLE = 4'h1;
@@ -71,6 +72,9 @@ wire        sdr_rd_nWE ;
 wire [12:0] sdr_rd_row_addr ;
 wire        sdr_rd_vld ;
 wire [15:0] sdr_rdata_out ;
+wire [15:0] sdr_wdata ;
+wire [3:0]  sdr_wdata_filled_depth ;
+wire        sdr_wdata_rd ;
 wire [12:0] sdr_wr_A ;
 wire [1:0]  sdr_wr_BA ;
 wire        sdr_wr_CKE ;
@@ -84,6 +88,12 @@ wire        sdr_wr_nRAS ;
 wire        sdr_wr_nWE ;
 wire        sdr_wr_ready ;
 wire [12:0] sdr_wr_row_addr ;
+wire [3:0]  w_fifo_addr_r ;
+wire [3:0]  w_fifo_addr_w ;
+wire        w_fifo_empty ;
+wire        w_fifo_full ;
+wire        w_fifo_rd_r ;
+wire        w_fifo_wr_w ;
 wire        wr_exit ;
 //}}}
 //auto regs{{{
@@ -174,6 +184,42 @@ always @(*) begin
     endcase
 end
 
+assign sdr_wr_ready = ~w_fifo_full;
+
+regfile_2p_16x16 u_w_regfile_2p_16x16(/*autoinst*/
+        .CLKB      ( clk                ),    //I         u_w_regfile_2p_16x16    
+        .CENB      ( ~w_fifo_wr_w        ),    //I         u_w_regfile_2p_16x16    
+        .WENB      ( ~w_fifo_wr_w        ),    //I         u_w_regfile_2p_16x16    
+        .AB        ( w_fifo_addr_w[3:0] ),    //I  [3:0]  u_w_regfile_2p_16x16    
+        .DB        ( sdr_wdata_in[15:0] ),    //I  [15:0] u_w_regfile_2p_16x16    
+        .testmodep ( 1'b0               ),    //I         u_w_regfile_2p_16x16    
+        .CLKA      ( clk                ),    //I         u_w_regfile_2p_16x16    
+        .CENA      ( ~w_fifo_rd_r        ),    //I         u_w_regfile_2p_16x16    
+        .AA        ( w_fifo_addr_r[3:0] ),    //I  [3:0]  u_w_regfile_2p_16x16    
+        .QA        ( sdr_wdata[15:0]    )     //O  [15:0] u_w_regfile_2p_16x16    
+);
+
+sfifo_ctrl_typ2 #(.FIFO_DEPTH(4)) u_w_sfifo_ctrl_typ2(/*autoinst*/
+        .clk_fifo          ( clk                             ),    //I             u_w_sfifo_ctrl_typ2    
+        .rst_fifo_n        ( rst_n                           ),    //I             u_w_sfifo_ctrl_typ2    
+        .fifo_af_lvl       ( 4'h8                            ),    //I  [FIFO_DEPTH-1:0] u_w_sfifo_ctrl_typ2    
+        .fifo_ae_lvl       ( 4'h0                            ),    //I  [FIFO_DEPTH-1:0] u_w_sfifo_ctrl_typ2    
+        .fifo_clr          ( 1'b0                            ),    //I             u_w_sfifo_ctrl_typ2    
+        .fifo_req_w        ( sdr_wdata_wr                    ),    //I             u_w_sfifo_ctrl_typ2    
+        .fifo_req_r        ( sdr_wdata_rd                    ),    //I             u_w_sfifo_ctrl_typ2    
+        .fifo_wr_w         ( w_fifo_wr_w                     ),    //O             u_w_sfifo_ctrl_typ2    
+        .fifo_rd_r         ( w_fifo_rd_r                     ),    //O             u_w_sfifo_ctrl_typ2    
+        .fifo_addr_w       ( w_fifo_addr_w[3:0]   ),    //O  [FIFO_DEPTH-1:0] u_w_sfifo_ctrl_typ2    
+        .fifo_addr_r       ( w_fifo_addr_r[3:0]   ),    //O  [FIFO_DEPTH-1:0] u_w_sfifo_ctrl_typ2    
+        .fifo_af           (                                 ),    //O             u_w_sfifo_ctrl_typ2    
+        .fifo_ae           (                                 ),    //O             u_w_sfifo_ctrl_typ2    
+        .fifo_full         ( w_fifo_full                     ),    //O             u_w_sfifo_ctrl_typ2    
+        .fifo_empty        ( w_fifo_empty                    ),    //O             u_w_sfifo_ctrl_typ2    
+        .fifo_filled_depth ( sdr_wdata_filled_depth[3:0]     ),    //O  [FIFO_DEPTH:0] u_w_sfifo_ctrl_typ2    
+        .fifo_waddr        (                                 ),    //O  [FIFO_DEPTH:0] u_w_sfifo_ctrl_typ2    
+        .fifo_raddr        (                                 )     //O  [FIFO_DEPTH:0] u_w_sfifo_ctrl_typ2    
+);
+
 sdr_init u_sdr_init(/*autoinst*/
         .clk       ( clk               ),    //I         u_sdr_init    
         .rst_n     ( rst_n             ),    //I         u_sdr_init    
@@ -189,22 +235,26 @@ sdr_init u_sdr_init(/*autoinst*/
 );
 
 sdr_wr u_sdr_wr(/*autoinst*/
-        .clk           ( clk                   ),    //I         u_sdr_wr    
-        .rst_n         ( rst_n                 ),    //I         u_sdr_wr    
-        .sdr_CKE       ( sdr_wr_CKE            ),    //O         u_sdr_wr    
-        .sdr_nCS       ( sdr_wr_nCS            ),    //O         u_sdr_wr    
-        .sdr_BA        ( sdr_wr_BA[1:0]        ),    //O  [1:0]  u_sdr_wr    
-        .sdr_A         ( sdr_wr_A[12:0]        ),    //O  [12:0] u_sdr_wr    
-        .sdr_nRAS      ( sdr_wr_nRAS           ),    //O         u_sdr_wr    
-        .sdr_nCAS      ( sdr_wr_nCAS           ),    //O         u_sdr_wr    
-        .sdr_nWE       ( sdr_wr_nWE            ),    //O         u_sdr_wr    
-        .sdr_DQ        ( sdr_wr_DQ[15:0]       ),    //IO [15:0] u_sdr_wr    
-        .sdr_DQM       ( sdr_wr_DQM[1:0]       ),    //O  [1:0]  u_sdr_wr    
-        .sdr_wr_req    ( sdr_wr_req            ),    //I         u_sdr_wr    
-        .sdr_bank_addr ( sdr_wr_bank_addr[1:0] ),    //I  [1:0]  u_sdr_wr    
-        .sdr_row_addr  ( sdr_wr_row_addr[12:0] ),    //I  [12:0] u_sdr_wr    
-        .sdr_col_addr  ( sdr_wr_col_addr[8:0]  ),    //I  [8:0]  u_sdr_wr    
-        .wr_exit       ( wr_exit               )     //O         u_sdr_wr    
+        .clk                    ( clk                         ),    //I         u_sdr_wr    
+        .rst_n                  ( rst_n                       ),    //I         u_sdr_wr    
+        .sdr_CKE                ( sdr_wr_CKE                  ),    //O         u_sdr_wr    
+        .sdr_nCS                ( sdr_wr_nCS                  ),    //O         u_sdr_wr    
+        .sdr_BA                 ( sdr_wr_BA[1:0]              ),    //O  [1:0]  u_sdr_wr    
+        .sdr_A                  ( sdr_wr_A[12:0]              ),    //O  [12:0] u_sdr_wr    
+        .sdr_nRAS               ( sdr_wr_nRAS                 ),    //O         u_sdr_wr    
+        .sdr_nCAS               ( sdr_wr_nCAS                 ),    //O         u_sdr_wr    
+        .sdr_nWE                ( sdr_wr_nWE                  ),    //O         u_sdr_wr    
+        .sdr_DQ                 ( sdr_wr_DQ[15:0]             ),    //IO [15:0] u_sdr_wr    
+        .sdr_DQM                ( sdr_wr_DQM[1:0]             ),    //O  [1:0]  u_sdr_wr    
+        .sdr_wr_req             ( sdr_wr_req                  ),    //I         u_sdr_wr    
+        .sdr_wr_byte_cnt        ( sdr_wr_byte_cnt[11:0]       ),    //I  [11:0] u_sdr_wr    
+        .sdr_bank_addr          ( sdr_wr_bank_addr[1:0]       ),    //I  [1:0]  u_sdr_wr    
+        .sdr_row_addr           ( sdr_wr_row_addr[12:0]       ),    //I  [12:0] u_sdr_wr    
+        .sdr_col_addr           ( sdr_wr_col_addr[8:0]        ),    //I  [8:0]  u_sdr_wr    
+        .wr_exit                ( wr_exit                     ),    //O         u_sdr_wr    
+        .sdr_wdata_filled_depth ( sdr_wdata_filled_depth[3:0] ),    //I  [3:0]  u_sdr_wr    
+        .sdr_wdata_rd           ( sdr_wdata_rd                ),    //O         u_sdr_wr    
+        .sdr_wdata              ( sdr_wdata[15:0]             )     //I  [15:0] u_sdr_wr    
 );
 
 sdr_rd u_sdr_rd(/*autoinst*/

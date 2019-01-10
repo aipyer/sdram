@@ -5,37 +5,38 @@ module sdr_wr(/*autoarg*/
 
     //Outputs
     sdr_CKE, sdr_nCS, sdr_BA, sdr_A, sdr_nRAS, sdr_nCAS, sdr_nWE,
-    sdr_DQM, wr_exit,
+    sdr_DQM, wr_exit, sdr_wdata_rd,
 
     //Inputs
-    clk, rst_n, sdr_wr_req, sdr_bank_addr, sdr_row_addr, sdr_col_addr
+    clk, rst_n, sdr_wr_req, sdr_wr_byte_cnt, sdr_bank_addr,
+    sdr_row_addr, sdr_col_addr, sdr_wdata_filled_depth, sdr_wdata
 );
 
 `include "sdr_parameters.vh"
 
-input                 clk              ;  //clock, 167MHz
-input                 rst_n            ;
+input                 clk                       ;  //clock, 167MHz
+input                 rst_n                     ;
 
-output                sdr_CKE          ;
-output                sdr_nCS          ;
-output      [1:0]     sdr_BA           ;
-output      [12:0]    sdr_A            ;
-output                sdr_nRAS         ;
-output                sdr_nCAS         ;
-output                sdr_nWE          ;
-inout       [15:0]    sdr_DQ           ;
-output      [1:0]     sdr_DQM          ;
+output                sdr_CKE                   ;
+output                sdr_nCS                   ;
+output      [1:0]     sdr_BA                    ;
+output      [12:0]    sdr_A                     ;
+output                sdr_nRAS                  ;
+output                sdr_nCAS                  ;
+output                sdr_nWE                   ;
+inout       [15:0]    sdr_DQ                    ;
+output      [1:0]     sdr_DQM                   ;
 
-input                 sdr_wr_req       ;    //write operation request
-input       [11:0]    sdr_wr_byte_cnt  ;    //write total byte cnt
+input                 sdr_wr_req                ;  //write operation request
+input       [11:0]    sdr_wr_byte_cnt           ;  //write total byte cnt
 //input                 sdr_wr_term      ;    //write operation termination signal
-input       [1:0]     sdr_bank_addr    ;
-input       [12:0]    sdr_row_addr     ;
-input       [8:0]     sdr_col_addr     ;
-output                wr_exit          ;
-input       [3:0]     sdr_wdata_filled_depth;
-output              sdr_wdata_rd;
-input       [15:0]  sdr_wdata;
+input       [1:0]     sdr_bank_addr             ;
+input       [12:0]    sdr_row_addr              ;
+input       [8:0]     sdr_col_addr              ;
+output                wr_exit                   ;
+input       [3:0]     sdr_wdata_filled_depth    ;
+output                sdr_wdata_rd              ;
+input       [15:0]    sdr_wdata                 ;
 
 localparam S_IDLE = 4'h0;
 localparam S_ACTIVE = 4'h1;
@@ -54,31 +55,43 @@ localparam NRP = (tRP/tCK);
 
 /*autodefine*/
 //auto wires{{{
-wire          active_done;
-wire          precharge_done;
-wire          sdr_CKE;
-wire[15:0]    sdr_DQ;
-wire[1:0]     sdr_DQM;
-wire          sdr_nCS;
-wire          wr_done;
-wire        wr_exit;
-wire        wr_one_row_end;
-wire[11:0]  cur_col_addr;
-wire        wr_vld;
+wire        active_done ;
+wire        active_state ;
+wire [1:0]  cur_bank_addr ;
+wire [24:0] cur_col_addr ;
+wire [13:0] cur_row_addr ;
+wire        exec_active_cmd ;
+wire        exec_precharge_cmd ;
+wire        exec_write_cmd ;
+wire        precharge_done ;
+wire        precharge_state ;
+wire        sdr_CKE ;
+wire [15:0] sdr_DQ ;
+wire [1:0]  sdr_DQM ;
+wire        sdr_nCS ;
+wire        wdata_rdy ;
+wire        wr_done ;
+wire        wr_exit ;
+wire [23:0] wr_left_cnt ;
+wire        wr_one_row_end ;
+wire        write_state ;
+wire        wr_burst_last;
 //}}}
 //auto regs{{{
-reg          sdr_nCAS;
-reg          sdr_nRAS;
-reg          sdr_nWE;
-reg[15:0]     base_cnt;
-reg           base_cnt_en;
-reg[12:0]     sdr_A;
-reg[1:0]      sdr_BA;
-reg[3:0]      sdr_wr_state;
-reg[3:0]      sdr_wr_state_nxt;
-reg[12:0]     cur_row_addr;
-reg[11:0]   wr_total_cnt;
-reg[1:0]    cur_bank_addr;
+reg        active_state_dly ;
+reg [15:0] base_cnt ;
+reg        base_cnt_en ;
+reg        precharge_state_dly ;
+reg [12:0] sdr_A ;
+reg [1:0]  sdr_BA ;
+reg        sdr_wdata_rd ;
+reg        sdr_wdata_rd_dly ;
+reg [3:0]  sdr_wr_state ;
+reg [3:0]  sdr_wr_state_nxt ;
+reg [23:0] wr_total_cnt ;
+reg        sdr_nCAS ;
+reg        sdr_nRAS ;
+reg        sdr_nWE ;
 //}}}
 // End of automatic define
 
@@ -95,7 +108,7 @@ always @(posedge clk or negedge rst_n)
         base_cnt_en <= #`RD 1'b0;
     else if(sdr_wr_req)
         base_cnt_en <= #`RD 1'b1;
-    else if(wr_done)
+    else if(wr_exit)
         base_cnt_en <= #`RD 1'b0;
 
 assign active_done = (base_cnt >= NRCD) & (sdr_wr_state == S_ACTIVE);
@@ -117,18 +130,19 @@ always @(posedge clk or negedge rst_n)
 assign cur_col_addr[24:0] = (wr_total_cnt[23:0] + {sdr_bank_addr[1:0], sdr_row_addr[12:0], sdr_col_addr[8:0]});
 assign cur_row_addr[13:0] = cur_col_addr[21:9];
 assign cur_bank_addr[1:0] = cur_col_addr[23:22];
-assign wr_one_row_end = (wr_total_cnt < sdr_wr_byte_cnt) ? (cur_col_addr[8:0] == 9'h0) : 1'b0;
+assign wr_one_row_end = sdr_wdata_rd_dly & (wr_total_cnt < sdr_wr_byte_cnt) ? (cur_col_addr[8:0] == 9'h0) : 1'b0;
 //assign wr_one_bank_end = (wr_total_cnt < sdr_wr_byte_cnt) ? (cur_col_addr[21:0] == 22'h0) : 1'b0;
 
 assign wr_left_cnt[23:0] = (sdr_wr_byte_cnt - wr_total_cnt);
 assign wdata_rdy = (|wr_left_cnt[23:2]) ? (sdr_wdata_filled_depth >= 4'h4) : (wr_left_cnt[1:0] == sdr_wdata_filled_depth);
+assign wr_burst_last = (wr_total_cnt[1:0] == 2'b11);
 
 always @(posedge clk or negedge rst_n)
     if(!rst_n)
         sdr_wdata_rd <= #`RD 1'b0;
-    else if(wdata_rdy & write_state)
+    else if(~sdr_wdata_rd_dly & wdata_rdy & write_state | wr_burst_last & wdata_rdy)
         sdr_wdata_rd <= #`RD 1'b1;
-    else 
+    else if(wr_burst_last)
         sdr_wdata_rd <= #`RD 1'b0;
 
 always @(posedge clk or negedge rst_n)
@@ -173,7 +187,7 @@ always @(posedge clk or negedge rst_n)
         precharge_state_dly <= #`RD precharge_state;
 
 assign write_state = (sdr_wr_state == S_WRITE);
-assign exec_write_cmd = sdr_wdata_rd_dly & (wr_total_cnt[1:0] == 2'h0);
+assign exec_write_cmd = sdr_wdata_rd & (wr_total_cnt[1:0] == 2'h0);
         
 
 always @(posedge clk or negedge rst_n)
@@ -198,9 +212,9 @@ always @(posedge clk or negedge rst_n)
 always @(posedge clk or negedge rst_n)
     if(!rst_n)
         sdr_A[12:0] <= #`RD 13'h0;
-    else if({sdr_wr_state, sdr_wr_state_nxt} == {S_ACTIVE, S_WRITE})
+    else if(exec_write_cmd)
         sdr_A[12:0] <= #`RD {2'h0, 1'b0, 1'b0, cur_col_addr[8:0]};
-    else
+    else if(exec_active_cmd)
         sdr_A[12:0] <= #`RD cur_row_addr;
 
 assign sdr_DQ[15:0] = sdr_wdata;

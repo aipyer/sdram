@@ -28,29 +28,34 @@ wire sdr_nWE;
 wire [15:0] sdr_DQ;
 wire [1:0] sdr_DQM;
 
+integer cnt;
+reg [11:0] sdr_wr_byte_cnt;
+reg sdr_wdata_wr;
+
 
 sdr sdram0 (sdr_DQ, sdr_A, sdr_BA, clk, sdr_CKE, sdr_nCS, sdr_nRAS, sdr_nCAS, sdr_nWE, sdr_DQM);
 sdr_top u_sdr_top(/*autoinst*/
-        .clk           ( clk                 ),    //I         u_sdr_top    
-        .rst_n         ( rst_n               ),    //I         u_sdr_top    
-        .sdr_wr_req    ( sdr_wr_req          ),    //I         u_sdr_top    
-        .sdr_wdata_in  ( sdr_wdata_in[15:0]  ),    //I  [15:0] u_sdr_top    
-        .sdr_wr_vld    ( sdr_wr_vld          ),    //I         u_sdr_top    
-        .sdr_wr_ready  ( sdr_wr_ready        ),    //O         u_sdr_top    
-        .sdr_waddr     ( sdr_waddr[31:0]     ),    //I  [31:0] u_sdr_top    
-        .sdr_rd_req    ( sdr_rd_req          ),    //I         u_sdr_top    
-        .sdr_rdata_out ( sdr_rdata_out[15:0] ),    //O  [15:0] u_sdr_top    
-        .sdr_rd_vld    ( sdr_rd_vld          ),    //O         u_sdr_top    
-        .sdr_raddr     ( sdr_raddr[31:0]     ),    //I  [31:0] u_sdr_top    
-        .sdr_CKE       ( sdr_CKE             ),    //O         u_sdr_top    
-        .sdr_nCS       ( sdr_nCS             ),    //O         u_sdr_top    
-        .sdr_BA        ( sdr_BA[1:0]         ),    //O  [1:0]  u_sdr_top    
-        .sdr_A         ( sdr_A[12:0]         ),    //O  [12:0] u_sdr_top    
-        .sdr_nRAS      ( sdr_nRAS            ),    //O         u_sdr_top    
-        .sdr_nCAS      ( sdr_nCAS            ),    //O         u_sdr_top    
-        .sdr_nWE       ( sdr_nWE             ),    //O         u_sdr_top    
-        .sdr_DQ        ( sdr_DQ[15:0]        ),    //IO [15:0] u_sdr_top    
-        .sdr_DQM       ( sdr_DQM[1:0]        )     //O  [1:0]  u_sdr_top    
+        .clk             ( clk                   ),    //I         u_sdr_top    
+        .rst_n           ( rst_n                 ),    //I         u_sdr_top    
+        .sdr_wr_req      ( sdr_wr_req            ),    //I         u_sdr_top    
+        .sdr_wdata_in    ( sdr_wdata_in[15:0]    ),    //I  [15:0] u_sdr_top    
+        .sdr_wdata_wr    ( sdr_wdata_wr          ),    //I         u_sdr_top    
+        .sdr_wr_ready    ( sdr_wr_ready          ),    //O         u_sdr_top    
+        .sdr_waddr       ( sdr_waddr[31:0]       ),    //I  [31:0] u_sdr_top    
+        .sdr_wr_byte_cnt ( sdr_wr_byte_cnt[11:0] ),    //I  [11:0] u_sdr_top    
+        .sdr_rd_req      ( sdr_rd_req            ),    //I         u_sdr_top    
+        .sdr_rdata_out   ( sdr_rdata_out[15:0]   ),    //O  [15:0] u_sdr_top    
+        .sdr_rd_vld      ( sdr_rd_vld            ),    //O         u_sdr_top    
+        .sdr_raddr       ( sdr_raddr[31:0]       ),    //I  [31:0] u_sdr_top    
+        .sdr_CKE         ( sdr_CKE               ),    //O         u_sdr_top    
+        .sdr_nCS         ( sdr_nCS               ),    //O         u_sdr_top    
+        .sdr_BA          ( sdr_BA[1:0]           ),    //O  [1:0]  u_sdr_top    
+        .sdr_A           ( sdr_A[12:0]           ),    //O  [12:0] u_sdr_top    
+        .sdr_nRAS        ( sdr_nRAS              ),    //O         u_sdr_top    
+        .sdr_nCAS        ( sdr_nCAS              ),    //O         u_sdr_top    
+        .sdr_nWE         ( sdr_nWE               ),    //O         u_sdr_top    
+        .sdr_DQ          ( sdr_DQ[15:0]          ),    //IO [15:0] u_sdr_top    
+        .sdr_DQM         ( sdr_DQM[1:0]          )     //O  [1:0]  u_sdr_top    
 );
 
 initial begin
@@ -58,31 +63,44 @@ initial begin
     rst_n = 1'b0;
     sdr_wr_req = 1'b0;
     sdr_rd_req = 1'b0;
+    sdr_wdata_wr = 1'b0;
     #10;
     rst_n = 1'b1;
 
     #100us;
     #tCK;
     #1us;
+    sdr_wr_byte_cnt = 12'd100;
+    sdr_waddr = 32'd0;
+    cnt = 0;
     sdr_wr_req = 1'b1;
-    sdr_waddr = 32'h0;
     #tCK;
     sdr_wr_req = 1'b0;
-    #100us;
-    sdr_rd_req = 1'b1;
-    sdr_raddr = 32'h0;
-    #tCK;
-    sdr_rd_req = 1'b0;
-    #1us;
-    sdr_wr_req = 1'b1;
-    sdr_waddr = 32'h0;
-    #tCK;
-    sdr_wr_req = 1'b0;
-    #100us;
-    sdr_rd_req = 1'b1;
-    sdr_raddr = 32'h0;
-    #tCK;
-    sdr_rd_req = 1'b0;
+    while(cnt < 100) begin
+        if(sdr_wr_ready) begin sdr_wdata_in = cnt; sdr_wdata_wr = 1'b1; cnt = cnt + 1; end
+        #tCK;
+        sdr_wdata_wr =  1'b0;
+        #tCK;
+    end
+//    sdr_wr_req = 1'b1;
+//    sdr_waddr = 32'h0;
+//    #tCK;
+//    sdr_wr_req = 1'b0;
+//    #100us;
+//    sdr_rd_req = 1'b1;
+//    sdr_raddr = 32'h0;
+//    #tCK;
+//    sdr_rd_req = 1'b0;
+//    #1us;
+//    sdr_wr_req = 1'b1;
+//    sdr_waddr = 32'h0;
+//    #tCK;
+//    sdr_wr_req = 1'b0;
+//    #100us;
+//    sdr_rd_req = 1'b1;
+//    sdr_raddr = 32'h0;
+//    #tCK;
+//    sdr_rd_req = 1'b0;
     #1us;
     $finish;
 end
