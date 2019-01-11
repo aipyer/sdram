@@ -9,7 +9,8 @@ module sdr_wr(/*autoarg*/
 
     //Inputs
     clk, rst_n, sdr_wr_req, sdr_wr_byte_cnt, sdr_bank_addr,
-    sdr_row_addr, sdr_col_addr, sdr_wdata_filled_depth, sdr_wdata
+    sdr_row_addr, sdr_col_addr, sdr_wdata_filled_depth, sdr_wdata,
+    need_ref
 );
 
 `include "sdr_parameters.vh"
@@ -33,15 +34,20 @@ input       [11:0]    sdr_wr_byte_cnt           ;  //write total byte cnt
 input       [1:0]     sdr_bank_addr             ;
 input       [12:0]    sdr_row_addr              ;
 input       [8:0]     sdr_col_addr              ;
+
 output                wr_exit                   ;
 input       [3:0]     sdr_wdata_filled_depth    ;
 output                sdr_wdata_rd              ;
 input       [15:0]    sdr_wdata                 ;
 
+input                 need_ref;//request for auto-refresh
+output                sdr_wr_pausing;
+
 localparam S_IDLE = 4'h0;
 localparam S_ACTIVE = 4'h1;
 localparam S_WRITE = 4'h2;
 localparam S_PRECHARGE = 4'h3;
+localparam S_PAUSE = 4'h4;
 
 localparam CMD_NOP = 3'b111;
 localparam CMD_ACTIVE = 3'b011;
@@ -92,6 +98,9 @@ reg [23:0] wr_total_cnt ;
 reg        sdr_nCAS ;
 reg        sdr_nRAS ;
 reg        sdr_nWE ;
+reg [1:0] sdr_bank_addr_r;
+reg [12:0] sdr_row_addr_r;
+reg [8:0] sdr_col_addr_r;
 //}}}
 // End of automatic define
 
@@ -126,8 +135,26 @@ always @(posedge clk or negedge rst_n)
     else if(sdr_wdata_rd)
         wr_total_cnt[23:0] <= #`RD wr_total_cnt + 24'h1;
 
+always @(posedge clk or negedge rst_n)
+    if(!rst_n)
+        sdr_bank_addr_r[1:0] <= #`RD 2'h0;
+    else if(sdr_wr_req)
+        sdr_bank_addr_r[1:0] <= #`RD sdr_bank_addr;
 
-assign cur_col_addr[24:0] = (wr_total_cnt[23:0] + {sdr_bank_addr[1:0], sdr_row_addr[12:0], sdr_col_addr[8:0]});
+always @(posedge clk or negedge rst_n)
+    if(!rst_n)
+        sdr_row_addr_r[12:0] <= #`RD 13'h0;
+    else if(sdr_wr_req)
+        sdr_row_addr_r[12:0] <= #`RD sdr_row_addr;
+
+always @(posedge clk or negedge rst_n)
+    if(!rst_n)
+        sdr_col_addr_r[8:0] <= #`RD 9'h0;
+    else if(sdr_wr_req)
+        sdr_col_addr_r[8:0] <= #`RD sdr_col_addr;
+
+
+assign cur_col_addr[24:0] = (wr_total_cnt[23:0] + {sdr_bank_addr_r[1:0], sdr_row_addr_r[12:0], sdr_col_addr_r[8:0]});
 assign cur_row_addr[13:0] = cur_col_addr[21:9];
 assign cur_bank_addr[1:0] = cur_col_addr[23:22];
 assign wr_one_row_end = sdr_wdata_rd_dly & (wr_total_cnt < sdr_wr_byte_cnt) ? (cur_col_addr[8:0] == 9'h0) : 1'b0;
@@ -140,7 +167,7 @@ assign wr_burst_last = (wr_total_cnt[1:0] == 2'b11);
 always @(posedge clk or negedge rst_n)
     if(!rst_n)
         sdr_wdata_rd <= #`RD 1'b0;
-    else if(~sdr_wdata_rd_dly & wdata_rdy & write_state | wr_burst_last & wdata_rdy)
+    else if(~need_ref & (write_state & wdata_rdy) & (~sdr_wdata_rd_dly | wr_burst_last))
         sdr_wdata_rd <= #`RD 1'b1;
     else if(wr_burst_last)
         sdr_wdata_rd <= #`RD 1'b0;
@@ -161,14 +188,19 @@ always @(posedge clk or negedge rst_n)
 always @(*) begin
     sdr_wr_state_nxt[3:0] = sdr_wr_state;
     case(sdr_wr_state)
-        S_IDLE: if(sdr_wr_req) sdr_wr_state_nxt = S_ACTIVE;
-        S_ACTIVE: if(active_done) sdr_wr_state_nxt = S_WRITE;
-        S_WRITE: if(wr_done | wr_one_row_end) sdr_wr_state_nxt = S_PRECHARGE;
-        S_PRECHARGE: if(precharge_done & wr_one_row_end) sdr_wr_state_nxt = S_ACTIVE;
+        S_IDLE: if(~need_ref & sdr_wr_req) sdr_wr_state_nxt = S_ACTIVE;
+        S_ACTIVE: if(need_ref & active_done) sdr_wr_state_nxt = S_PRECHARGE;
+                else if(active_done) sdr_wr_state_nxt = S_WRITE;
+        S_WRITE: if((need_ref & exec_write_cmd) | wr_done | wr_one_row_end) sdr_wr_state_nxt = S_PRECHARGE;
+        S_PRECHARGE: if(need_ref & precharge_done) sdr_wr_state_nxt = S_IDLE;
+                    else if(precharge_done & wr_one_row_end) sdr_wr_state_nxt = S_ACTIVE;
                     else if(precharge_done) sdr_wr_state_nxt = S_IDLE;
+        S_PAUSE: if(~need_ref) sdr_wr_state_next = S_ACTIVE;
         default: sdr_wr_state_nxt = S_IDLE;
     endcase
 end
+
+assign sdr_wr_pausing = (sdr_wr_state == S_PAUSE);
 
 assign active_state = (sdr_wr_state == S_ACTIVE);
 assign exec_active_cmd = (~active_state_dly) & active_state;

@@ -254,7 +254,8 @@ sdr_wr u_sdr_wr(/*autoinst*/
         .wr_exit                ( wr_exit                     ),    //O         u_sdr_wr    
         .sdr_wdata_filled_depth ( sdr_wdata_filled_depth[3:0] ),    //I  [3:0]  u_sdr_wr    
         .sdr_wdata_rd           ( sdr_wdata_rd                ),    //O         u_sdr_wr    
-        .sdr_wdata              ( sdr_wdata[15:0]             )     //I  [15:0] u_sdr_wr    
+        .sdr_wdata              ( sdr_wdata[15:0]             ),    //I  [15:0] u_sdr_wr    
+        .need_ref               ( 1'b0                        )     //I         u_sdr_wr
 );
 
 sdr_rd u_sdr_rd(/*autoinst*/
