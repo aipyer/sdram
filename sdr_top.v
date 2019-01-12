@@ -188,13 +188,13 @@ assign sdr_wr_ready = ~w_fifo_full;
 
 regfile_2p_16x16 u_w_regfile_2p_16x16(/*autoinst*/
         .CLKB      ( clk                ),    //I         u_w_regfile_2p_16x16    
-        .CENB      ( ~w_fifo_wr_w        ),    //I         u_w_regfile_2p_16x16    
-        .WENB      ( ~w_fifo_wr_w        ),    //I         u_w_regfile_2p_16x16    
+        .CENB      ( ~w_fifo_wr_w       ),    //I         u_w_regfile_2p_16x16    
+        .WENB      ( ~w_fifo_wr_w       ),    //I         u_w_regfile_2p_16x16    
         .AB        ( w_fifo_addr_w[3:0] ),    //I  [3:0]  u_w_regfile_2p_16x16    
         .DB        ( sdr_wdata_in[15:0] ),    //I  [15:0] u_w_regfile_2p_16x16    
         .testmodep ( 1'b0               ),    //I         u_w_regfile_2p_16x16    
         .CLKA      ( clk                ),    //I         u_w_regfile_2p_16x16    
-        .CENA      ( ~w_fifo_rd_r        ),    //I         u_w_regfile_2p_16x16    
+        .CENA      ( ~w_fifo_rd_r       ),    //I         u_w_regfile_2p_16x16    
         .AA        ( w_fifo_addr_r[3:0] ),    //I  [3:0]  u_w_regfile_2p_16x16    
         .QA        ( sdr_wdata[15:0]    )     //O  [15:0] u_w_regfile_2p_16x16    
 );
@@ -209,8 +209,8 @@ sfifo_ctrl_typ2 #(.FIFO_DEPTH(4)) u_w_sfifo_ctrl_typ2(/*autoinst*/
         .fifo_req_r        ( sdr_wdata_rd                    ),    //I             u_w_sfifo_ctrl_typ2    
         .fifo_wr_w         ( w_fifo_wr_w                     ),    //O             u_w_sfifo_ctrl_typ2    
         .fifo_rd_r         ( w_fifo_rd_r                     ),    //O             u_w_sfifo_ctrl_typ2    
-        .fifo_addr_w       ( w_fifo_addr_w[3:0]   ),    //O  [FIFO_DEPTH-1:0] u_w_sfifo_ctrl_typ2    
-        .fifo_addr_r       ( w_fifo_addr_r[3:0]   ),    //O  [FIFO_DEPTH-1:0] u_w_sfifo_ctrl_typ2    
+        .fifo_addr_w       ( w_fifo_addr_w[3:0]              ),    //O  [FIFO_DEPTH-1:0] u_w_sfifo_ctrl_typ2    
+        .fifo_addr_r       ( w_fifo_addr_r[3:0]              ),    //O  [FIFO_DEPTH-1:0] u_w_sfifo_ctrl_typ2    
         .fifo_af           (                                 ),    //O             u_w_sfifo_ctrl_typ2    
         .fifo_ae           (                                 ),    //O             u_w_sfifo_ctrl_typ2    
         .fifo_full         ( w_fifo_full                     ),    //O             u_w_sfifo_ctrl_typ2    
@@ -255,7 +255,8 @@ sdr_wr u_sdr_wr(/*autoinst*/
         .sdr_wdata_filled_depth ( sdr_wdata_filled_depth[3:0] ),    //I  [3:0]  u_sdr_wr    
         .sdr_wdata_rd           ( sdr_wdata_rd                ),    //O         u_sdr_wr    
         .sdr_wdata              ( sdr_wdata[15:0]             ),    //I  [15:0] u_sdr_wr    
-        .need_ref               ( 1'b0                        )     //I         u_sdr_wr
+        .need_ref               ( 1'b0                        ),    //I         u_sdr_wr    
+        .sdr_wr_pausing         ( sdr_wr_pausing              )     //O         u_sdr_wr    
 );
 
 sdr_rd u_sdr_rd(/*autoinst*/

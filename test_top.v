@@ -70,13 +70,13 @@ initial begin
     #100us;
     #tCK;
     #1us;
-    sdr_wr_byte_cnt = 12'd100;
+    sdr_wr_byte_cnt = 12'd1000;
     sdr_waddr = 32'd0;
     cnt = 0;
     sdr_wr_req = 1'b1;
     #tCK;
     sdr_wr_req = 1'b0;
-    while(cnt < 100) begin
+    while(cnt < 1000) begin
         if(sdr_wr_ready) begin sdr_wdata_in = cnt; sdr_wdata_wr = 1'b1; cnt = cnt + 1; end
         #tCK;
         sdr_wdata_wr =  1'b0;
@@ -104,6 +104,7 @@ initial begin
     #1us;
     $finish;
 end
+
 
 always #(tCK/2) clk = ~clk;
 
