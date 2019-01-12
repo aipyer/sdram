@@ -154,7 +154,7 @@ always @(posedge clk or negedge rst_n)
     else if({sdr_init_state, sdr_init_state_nxt} == {S_POWER_ON, S_PRECHARGE})
         sdr_A <= #`RD {2'h0, 1'h1, 10'h0};
     else if({sdr_init_state, sdr_init_state_nxt} == {S_AUTO_REFRESH_2, S_LMR})
-        sdr_A <= #`RD {3'h0, 1'h0, 2'h0, 3'h3, 1'h0, 3'h2}; // WB=0, CL=3, BT=0, BL=4
+        sdr_A <= #`RD {3'h0, WB, OPM, CL, BT, BL}; // WB=0, CL=3, BT=0, BL=4
 
 assign sdr_BA = 2'h0;
 assign sdr_DQM = 2'h0;

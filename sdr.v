@@ -1057,12 +1057,10 @@ module sdr (Dq, Addr, Ba, Clk, Cke, Cs_n, Ras_n, Cas_n, We_n, Dqm);
             tAS  =  1.5,                                        // Addr, Ba Setup Time
     `ifdef sg6a
             tCK3 =  6.0,
-    `elsif `ifdef sg7e
+    `elsif sg7e
             tCK3 =  7.0,
-        `endif
-    `else `ifdef sg75
+    `else `define sg75
             tCK3 =  7.5,
-        `endif
     `endif
             tCH  =  2.5,                                        // Clock High-Level Width
             tCL  =  2.5,                                        // Clock Low-Level Width

@@ -4,12 +4,14 @@ module sdr_top(/*autoarg*/
     sdr_DQ,
 
     //Outputs
-    sdr_wr_ready, sdr_rdata_out, sdr_rd_vld, sdr_CKE, sdr_nCS, sdr_BA,
-    sdr_A, sdr_nRAS, sdr_nCAS, sdr_nWE, sdr_DQM,
+    sdr_wdata_ready, sdr_rdata_out, sdr_rdata_rd, sdr_rdata_ready, 
+    sdr_CKE, sdr_nCS, sdr_BA, sdr_A, sdr_nRAS, sdr_nCAS, sdr_nWE, 
+    sdr_DQM,
 
     //Inputs
     clk, rst_n, sdr_wr_req, sdr_wdata_in, sdr_wdata_wr, sdr_waddr,
-    sdr_wr_byte_cnt, sdr_rd_req, sdr_raddr
+    sdr_wr_byte_cnt, sdr_rd_req, sdr_raddr, sdr_rd_byte_cnt, aref_req,
+    aref_done
 );
 
 //port decleration
@@ -19,14 +21,16 @@ input                 rst_n              ;  //reset
 input                 sdr_wr_req         ;
 input       [15:0]    sdr_wdata_in       ;
 input                 sdr_wdata_wr       ;
-output                sdr_wr_ready       ;
+output                sdr_wdata_ready       ;
 input       [31:0]    sdr_waddr          ;
 input       [11:0]    sdr_wr_byte_cnt    ;
 
 input                 sdr_rd_req         ;
 output      [15:0]    sdr_rdata_out      ;
-output                sdr_rd_vld         ;
+input               sdr_rdata_rd;
+output              sdr_rdata_ready;
 input       [31:0]    sdr_raddr          ;
+input       [11:0]  sdr_rd_byte_cnt;
 
 
 //sdr
@@ -44,11 +48,18 @@ localparam S_INIT = 4'h0;
 localparam S_IDLE = 4'h1;
 localparam S_WRITE = 4'h2;
 localparam S_READ = 4'h3;
+localparam S_AREF = 4'h4;
 
 /*autodefine*/
 //auto wires{{{
 wire        init_done ;
-wire        rd_done ;
+wire [3:0]  r_fifo_addr_r;
+wire [3:0] r_fifio_addr_w;
+wire        r_fifo_empty;
+wire        r_fifo_full;
+wire        r_fifo_rd_r;
+wire        r_fifo_wr_w;
+wire        rd_exit ;
 wire [15:0] sdr_DQ ;
 wire [12:0] sdr_init_A ;
 wire [1:0]  sdr_init_BA ;
@@ -70,11 +81,16 @@ wire        sdr_rd_nCS ;
 wire        sdr_rd_nRAS ;
 wire        sdr_rd_nWE ;
 wire [12:0] sdr_rd_row_addr ;
-wire        sdr_rd_vld ;
+wire [15:0] sdr_rdata;
+wire [4:0] sdr_rdata_filled_depth;
 wire [15:0] sdr_rdata_out ;
+wire sdr_rdata_ready;
+wire [4:0] sdr_rdata_unfilled_depth;
+wire sdr_rdata_wr;
 wire [15:0] sdr_wdata ;
-wire [3:0]  sdr_wdata_filled_depth ;
+wire [4:0]  sdr_wdata_filled_depth ;
 wire        sdr_wdata_rd ;
+wire sdr_wdata_ready;
 wire [12:0] sdr_wr_A ;
 wire [1:0]  sdr_wr_BA ;
 wire        sdr_wr_CKE ;
@@ -86,7 +102,7 @@ wire        sdr_wr_nCAS ;
 wire        sdr_wr_nCS ;
 wire        sdr_wr_nRAS ;
 wire        sdr_wr_nWE ;
-wire        sdr_wr_ready ;
+wire        sdr_wr_pausing;
 wire [12:0] sdr_wr_row_addr ;
 wire [3:0]  w_fifo_addr_r ;
 wire [3:0]  w_fifo_addr_w ;
@@ -128,10 +144,11 @@ always @(*) begin
     sdr_state_nxt[3:0] = sdr_state;
     case(sdr_state)
         S_INIT: if(init_done) sdr_state_nxt = S_IDLE;
-        S_IDLE: if(sdr_wr_req) sdr_state_nxt = S_WRITE;
+        S_IDLE: if(sdr_wr_req | sdr_wr_pausing) sdr_state_nxt = S_WRITE;
                 else if(sdr_rd_req) sdr_state_nxt = S_READ;
         S_WRITE: if(wr_exit) sdr_state_nxt = S_IDLE;
-        S_READ: if(rd_done) sdr_state_nxt = S_IDLE;
+        S_READ: if(rd_exit) sdr_state_nxt = S_IDLE;
+        S_AREF: if(aref_done) sdr_state_nxt = S_IDLE;
         default: sdr_state_nxt = S_INIT;
     endcase
 end
@@ -255,7 +272,7 @@ sdr_wr u_sdr_wr(/*autoinst*/
         .sdr_wdata_filled_depth ( sdr_wdata_filled_depth[3:0] ),    //I  [3:0]  u_sdr_wr    
         .sdr_wdata_rd           ( sdr_wdata_rd                ),    //O         u_sdr_wr    
         .sdr_wdata              ( sdr_wdata[15:0]             ),    //I  [15:0] u_sdr_wr    
-        .need_ref               ( 1'b0                        ),    //I         u_sdr_wr    
+        .need_ref               ( aref_req                    ),    //I         u_sdr_wr    
         .sdr_wr_pausing         ( sdr_wr_pausing              )     //O         u_sdr_wr    
 );
 
@@ -275,9 +292,14 @@ sdr_rd u_sdr_rd(/*autoinst*/
         .sdr_bank_addr ( sdr_rd_bank_addr[1:0] ),    //I  [1:0]  u_sdr_rd    
         .sdr_row_addr  ( sdr_rd_row_addr[12:0] ),    //I  [12:0] u_sdr_rd    
         .sdr_col_addr  ( sdr_rd_col_addr[8:0]  ),    //I  [8:0]  u_sdr_rd    
-        .rd_done       ( rd_done               )     //O         u_sdr_rd    
+        .rd_exit       ( rd_exit               ),    //O         u_sdr_rd    
+        .sdr_rdata_unfilled_depth (sdr_rdata_unfilled_depth[4:0]),
+        .sdr_rd_byte_cnt (sdr_rd_byte_cnt[11:0]),
+        .sdr_rdata_wr (sdr_rdata_wr),
+        .sdr_rdata  (sdr_rdata[15:0])
 );
 
+assign sdr_rdata_unfilled_depth = (5'd16 - sdr_rdata_filled_depth);
 assign sdr_DQ[15:0] = (sdr_state == S_WRITE) ? sdr_wr_DQ : 16'hz;
 
 endmodule

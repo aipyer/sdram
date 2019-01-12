@@ -36,7 +36,7 @@ input       [12:0]    sdr_row_addr              ;
 input       [8:0]     sdr_col_addr              ;
 
 output                wr_exit                   ;
-input       [3:0]     sdr_wdata_filled_depth    ;
+input       [4:0]     sdr_wdata_filled_depth    ;
 output                sdr_wdata_rd              ;
 input       [15:0]    sdr_wdata                 ;
 
@@ -78,6 +78,7 @@ wire        sdr_nCS ;
 wire        wdata_rdy ;
 wire        wr_last;
 wire        wr_exit ;
+wire        wr_data_over;
 wire [23:0] wr_left_cnt ;
 wire        wr_one_row_end ;
 wire        write_state ;
@@ -91,7 +92,7 @@ reg        precharge_state_dly ;
 reg [12:0] sdr_A ;
 reg [1:0]  sdr_BA ;
 reg        sdr_wdata_rd ;
-reg        sdr_wdata_rd_dly ;
+reg        wdata_wr_en ;
 reg [3:0]  sdr_wr_state ;
 reg [3:0]  sdr_wr_state_nxt ;
 reg [23:0] wr_total_cnt ;
@@ -108,7 +109,7 @@ reg     wr_done;
 always @(posedge clk or negedge rst_n)
     if(!rst_n)
         base_cnt[15:0] <= #`RD 16'h0;
-    else if(active_done | wr_done | wr_one_row_end| precharge_done | (need_ref & wr_burst_last))
+    else if(active_done | wr_done | wr_one_row_end| precharge_done | (~sdr_wdata_rd & need_ref & write_state) | sdr_wr_pausing)
         base_cnt <= #`RD 16'h0;
     else if(base_cnt_en)
         base_cnt <= #`RD base_cnt + 16'h1;
@@ -166,12 +167,13 @@ always @(posedge clk or negedge rst_n)
 assign cur_col_addr[24:0] = (wr_total_cnt[23:0] + {sdr_bank_addr_r[1:0], sdr_row_addr_r[12:0], sdr_col_addr_r[8:0]});
 assign cur_row_addr[13:0] = cur_col_addr[21:9];
 assign cur_bank_addr[1:0] = cur_col_addr[23:22];
-assign wr_one_row_end = sdr_wdata_rd_dly & (wr_total_cnt < sdr_wr_byte_cnt) ? (cur_col_addr[8:0] == 9'h0) : 1'b0;
+assign wr_one_row_end = wdata_wr_en & (wr_total_cnt < sdr_wr_byte_cnt) ? (cur_col_addr[8:0] == 9'h0) : 1'b0;
 //assign wr_one_bank_end = (wr_total_cnt < sdr_wr_byte_cnt) ? (cur_col_addr[21:0] == 22'h0) : 1'b0;
 
 assign wr_left_cnt[23:0] = (sdr_wr_byte_cnt - wr_total_cnt);
-assign wdata_rdy = (wr_left_cnt == 24'h0) ? 1'b0 : 
-                    (|wr_left_cnt[23:2]) ? (sdr_wdata_filled_depth >= 4'h4) : (wr_left_cnt[1:0] == sdr_wdata_filled_depth);
+assign wr_data_over = (wr_left_cnt == 24'h0);
+assign wdata_rdy = wr_data_over ? 1'b0 : 
+                    (|wr_left_cnt[23:2]) ? (sdr_wdata_filled_depth >= 5'h4) : (wr_left_cnt[23:0] <= {19'h0, sdr_wdata_filled_depth});
 assign wr_burst_last = (wr_total_cnt[1:0] == 2'b11);
 
 always @(posedge clk or negedge rst_n)
@@ -179,16 +181,16 @@ always @(posedge clk or negedge rst_n)
         sdr_wdata_rd <= #`RD 1'b0;
     else if(wr_last & sdr_wdata_rd)
         sdr_wdata_rd <= #`RD 1'b0;
-    else if(~need_ref & (write_state & wdata_rdy) & (~sdr_wdata_rd_dly | wr_burst_last))
+    else if(~need_ref & (write_state & wdata_rdy) & (~wdata_wr_en | wr_burst_last))
         sdr_wdata_rd <= #`RD 1'b1;
     else if(wr_burst_last)
         sdr_wdata_rd <= #`RD 1'b0;
 
 always @(posedge clk or negedge rst_n)
     if(!rst_n)
-        sdr_wdata_rd_dly <= #`RD 1'b0;
+        wdata_wr_en <= #`RD 1'b0;
     else
-        sdr_wdata_rd_dly <= #`RD sdr_wdata_rd;
+        wdata_wr_en <= #`RD sdr_wdata_rd;
 
 
 always @(posedge clk or negedge rst_n)
@@ -203,9 +205,9 @@ always @(*) begin
         S_IDLE: if(~need_ref & sdr_wr_req) sdr_wr_state_nxt = S_ACTIVE;
         S_ACTIVE: if(need_ref & active_done) sdr_wr_state_nxt = S_PRECHARGE;
                 else if(active_done) sdr_wr_state_nxt = S_WRITE;
-        S_WRITE: if((need_ref & wr_burst_last) | wr_done | wr_one_row_end) sdr_wr_state_nxt = S_PRECHARGE;
-        S_PRECHARGE: if(need_ref & precharge_done) sdr_wr_state_nxt = S_IDLE;
-                    else if(precharge_done & (wr_left_cnt > 24'h0)) sdr_wr_state_nxt = S_ACTIVE;
+        S_WRITE: if((~sdr_wdata_rd & need_ref) | wr_done | wr_one_row_end) sdr_wr_state_nxt = S_PRECHARGE;
+        S_PRECHARGE: if(need_ref & precharge_done) sdr_wr_state_nxt = S_PAUSE;
+                    else if(~need_ref & precharge_done & (~wr_data_over)) sdr_wr_state_nxt = S_ACTIVE;
                     else if(precharge_done) sdr_wr_state_nxt = S_IDLE;
         S_PAUSE: if(~need_ref) sdr_wr_state_nxt = S_ACTIVE;
         default: sdr_wr_state_nxt = S_IDLE;

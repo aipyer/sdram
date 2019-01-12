@@ -196,4 +196,9 @@
     parameter mem_sizes = 2**(ROW_BITS+COL_BITS) - 1;
 
 `define RD 1.5
+parameter CL = 3'h3;
+parameter BT = 1'h0;
+parameter BL = 3'h2;
+parameter WB = 1'h0;
+parameter OPM = 2'h0;
 
